@@ -10,6 +10,10 @@ import (
 func main() {
 	r := mux.NewRouter()
 
+	r.Use(loggingMiddleware)
+	r.Use(timingMiddleware)
+	r.Use(jsonFilterMiddleware)
+
 	r.HandleFunc("/books", listBooks).Methods("GET")
 	r.HandleFunc("/books", createBook).Methods("POST")
 	r.HandleFunc("/books/{id}", getBook).Methods("GET")
