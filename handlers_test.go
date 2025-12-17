@@ -14,46 +14,113 @@ func resetStore() {
 	nextID = 1
 }
 
-func TestCreateBook(t *testing.T) {
-	resetStore()
+func TestCreateBook_TableDriven(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		statusCode int
+	}{
+		{
+			name:       "valid book",
+			body:       `{"title":"Go","author":"Alan"}`,
+			statusCode: http.StatusCreated,
+		},
+		{
+			name:       "invalid json",
+			body:       `{invalid}`,
+			statusCode: http.StatusBadRequest,
+		},
+	}
 
-	body := `{"title":"Go in Action","author":"William"}`
-	req := httptest.NewRequest(http.MethodPost, "/books", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetStore()
 
-	rr := httptest.NewRecorder()
-	createBook(rr, req)
+			req := httptest.NewRequest(http.MethodPost, "/books", strings.NewReader(tt.body))
+			req.Header.Set("Content-Type", "application/json")
 
-	if rr.Code != http.StatusCreated {
-		t.Fatalf("expected status 201, got %d", rr.Code)
+			rr := httptest.NewRecorder()
+			createBook(rr, req)
+
+			if rr.Code != tt.statusCode {
+				t.Fatalf("expected %d, got %d", tt.statusCode, rr.Code)
+			}
+		})
 	}
 }
 
-func TestListBooks(t *testing.T) {
-	resetStore()
+func TestListBooks_TableDriven(t *testing.T) {
+	tests := []struct {
+		name       string
+		setup      func()
+		statusCode int
+	}{
+		{
+			name: "empty store",
+			setup: func() {
+				resetStore()
+			},
+			statusCode: http.StatusOK,
+		},
+		{
+			name: "with data",
+			setup: func() {
+				resetStore()
+				books[1] = Book{ID: 1, Title: "Go", Author: "Alan"}
+			},
+			statusCode: http.StatusOK,
+		},
+	}
 
-	books[1] = Book{ID: 1, Title: "Go", Author: "Alan"}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setup()
 
-	req := httptest.NewRequest(http.MethodGet, "/books", nil)
-	rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/books", nil)
+			rr := httptest.NewRecorder()
 
-	listBooks(rr, req)
+			listBooks(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", rr.Code)
+			if rr.Code != tt.statusCode {
+				t.Fatalf("expected %d, got %d", tt.statusCode, rr.Code)
+			}
+		})
 	}
 }
 
-func TestJSONFilterMiddlewareRejectsInvalidContentType(t *testing.T) {
-	handler := jsonFilterMiddleware(http.HandlerFunc(createBook))
+func TestJSONFilterMiddleware_TableDriven(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType string
+		statusCode  int
+	}{
+		{
+			name:        "valid content type",
+			contentType: "application/json",
+			statusCode:  http.StatusCreated,
+		},
+		{
+			name:        "invalid content type",
+			contentType: "text/plain",
+			statusCode:  http.StatusUnsupportedMediaType,
+		},
+	}
 
-	req := httptest.NewRequest(http.MethodPost, "/books", strings.NewReader(`{}`))
-	req.Header.Set("Content-Type", "text/plain")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetStore()
 
-	rr := httptest.NewRecorder()
-	handler.ServeHTTP(rr, req)
+			handler := jsonFilterMiddleware(http.HandlerFunc(createBook))
 
-	if rr.Code != http.StatusUnsupportedMediaType {
-		t.Fatalf("expected status 415, got %d", rr.Code)
+			req := httptest.NewRequest(http.MethodPost, "/books", strings.NewReader(`{"title":"Go","author":"Alan"}`))
+			req.Header.Set("Content-Type", tt.contentType)
+
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != tt.statusCode {
+				t.Fatalf("expected %d, got %d", tt.statusCode, rr.Code)
+			}
+		})
 	}
 }
